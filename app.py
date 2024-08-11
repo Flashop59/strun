@@ -199,65 +199,69 @@ def process_data(data):
         st.write(f"Field ID {field_id} Hull Points:")
         for point in hull_points:
             st.write(f"Lat: {point[0]}, Lng: {point[1]}")
-            folium.CircleMarker(
-                location=(point[0], point[1]),
-                radius=4,
-                color='yellow',
-                fill=True,
-                fill_color='yellow'
-            ).add_to(m)
         
-        # Generate more hull points and plot them
-        extended_hull_points = generate_more_hull_points(hull_points)
-        for i in range(len(extended_hull_points)):
-            folium.CircleMarker(
-                location=(extended_hull_points[i][0], extended_hull_points[i][1]),
-                radius=3,
-                color='yellow',
-                fill=True,
-                fill_color='yellow'
-            ).add_to(m)
+        folium.Polygon(
+            locations=hull_points.tolist(),
+            color='green',
+            fill=True,
+            fill_color='green',
+            fill_opacity=0.5
+        ).add_to(m)
+        
+        additional_points = generate_more_hull_points(hull_points)
+        folium.PolyLine(
+            locations=additional_points.tolist(),
+            color='yellow',
+            weight=2,
+            opacity=0.8
+        ).add_to(m)
 
     return m, combined_df, total_area, total_time, total_travel_distance, total_travel_time
 
-# Main Streamlit app
-st.title("Vehicle Field Area and Travel Analysis")
+# Streamlit app
+def main():
+    st.title("Field Data Visualization")
+    
+    # Input for vehicle ID and date range
+    vehicle = st.text_input("Enter Vehicle ID:")
+    start_date = st.date_input("Start Date", datetime.today() - timedelta(days=7))
+    end_date = st.date_input("End Date", datetime.today())
+    
+    if st.button("Fetch Data and Process"):
+        # Convert start_date and end_date to datetime.datetime objects
+        start_time = int(datetime.combine(start_date, datetime.min.time()).timestamp() * 1000)
+        end_time = int(datetime.combine(end_date, datetime.min.time()).timestamp() * 1000)
 
-vehicle = st.text_input("Enter Vehicle ID (e.g., BR1):")
-start_date = st.date_input("Enter Start Date", datetime.today())
-end_date = st.date_input("Enter End Date", datetime.today())
+        data = fetch_data(vehicle, start_time, end_time)
 
-if st.button("Fetch Data and Process"):
-    start_time = int(start_date.timestamp() * 1000)
-    end_time = int((end_date + timedelta(days=1)).timestamp() * 1000)
+        if data:
+            map_obj, field_df, total_area, total_time, total_travel_distance, total_travel_time = process_data(data)
+            
+            # Display the map
+            st.components.v1.html(map_obj._repr_html_(), height=600)
 
-    data = fetch_data(vehicle, start_time, end_time)
+            # Display the DataFrame and totals
+            st.write(field_df)
+            
+            st.write(f"\nTotal Area (Gunthas): {total_area}")
+            st.write(f"Total Time (Minutes): {total_time}")
+            st.write(f"Total Travel Distance (km): {total_travel_distance}")
+            st.write(f"Total Travel Time (minutes): {total_travel_time}")
+            
+            # Add a download button for the map
+            map_filename = f"{vehicle}_map_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.html"
+            map_obj.save(map_filename)
+            with open(map_filename, "rb") as file:
+                btn = st.download_button(
+                    label="Download Map as HTML",
+                    data=file,
+                    file_name=map_filename,
+                    mime="text/html"
+                )
+            
+            # Clean up the file after download
+            if btn:
+                os.remove(map_filename)
 
-    if data:
-        map_obj, field_df, total_area, total_time, total_travel_distance, total_travel_time = process_data(data)
-        
-        # Display the map
-        st.components.v1.html(map_obj._repr_html_(), height=600)
-
-        # Display the DataFrame and totals
-        st.write(field_df)
-        
-        st.write(f"\nTotal Area (Gunthas): {total_area}")
-        st.write(f"Total Time (Minutes): {total_time}")
-        st.write(f"Total Travel Distance (km): {total_travel_distance}")
-        st.write(f"Total Travel Time (minutes): {total_travel_time}")
-        
-        # Add a download button for the map
-        map_filename = f"{vehicle}_map_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.html"
-        map_obj.save(map_filename)
-        with open(map_filename, "rb") as file:
-            btn = st.download_button(
-                label="Download Map as HTML",
-                data=file,
-                file_name=map_filename,
-                mime="text/html"
-            )
-        
-        # Clean up the file after download
-        if btn:
-            os.remove(map_filename)
+if __name__ == "__main__":
+    main()
