@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
 from shapely.geometry import Polygon
@@ -6,11 +7,9 @@ from scipy.spatial import ConvexHull
 import folium
 from folium import plugins
 from geopy.distance import geodesic
-from datetime import datetime, timedelta
-from IPython.display import display
-from IPython.core.display import HTML
 import requests
-import streamlit as st
+from datetime import datetime, timedelta
+import os
 
 # Function to fetch data from the API
 def fetch_data(vehicle, start_time, end_time):
@@ -20,12 +19,12 @@ def fetch_data(vehicle, start_time, end_time):
     
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        print(f"Error fetching data: {response.status_code}")
+        st.error(f"Error fetching data: {response.status_code}")
         return None
 
     data = response.json()
     if not isinstance(data, list):
-        print(f"Unexpected data format: {data}")
+        st.error(f"Unexpected data format: {data}")
         return None
     
     # Sort data by time
@@ -197,9 +196,9 @@ def process_data(data):
         hull = ConvexHull(field_points)
         hull_points = field_points[hull.vertices]
         
-        print(f"Field ID {field_id} Hull Points:")
+        st.write(f"Field ID {field_id} Hull Points:")
         for point in hull_points:
-            print(f"Lat: {point[0]}, Lng: {point[1]}")
+            st.write(f"Lat: {point[0]}, Lng: {point[1]}")
             folium.CircleMarker(
                 location=(point[0], point[1]),
                 radius=4,
@@ -221,16 +220,16 @@ def process_data(data):
 
     return m, combined_df, total_area, total_time, total_travel_distance, total_travel_time
 
-# Main code in Streamlit
-st.title("Vehicle Field Area and Time Analysis")
+# Main Streamlit app
+st.title("Vehicle Field Area and Travel Analysis")
 
 vehicle = st.text_input("Enter Vehicle ID (e.g., BR1):")
-start_date = st.date_input("Enter Start Date:", datetime.now())
-end_date = st.date_input("Enter End Date:", datetime.now() + timedelta(days=1))
+start_date = st.date_input("Enter Start Date", datetime.today())
+end_date = st.date_input("Enter End Date", datetime.today())
 
-if st.button("Fetch and Analyze Data"):
+if st.button("Fetch Data and Process"):
     start_time = int(start_date.timestamp() * 1000)
-    end_time = int(end_date.timestamp() * 1000)
+    end_time = int((end_date + timedelta(days=1)).timestamp() * 1000)
 
     data = fetch_data(vehicle, start_time, end_time)
 
@@ -238,20 +237,27 @@ if st.button("Fetch and Analyze Data"):
         map_obj, field_df, total_area, total_time, total_travel_distance, total_travel_time = process_data(data)
         
         # Display the map
-        folium_static(map_obj)
+        st.components.v1.html(map_obj._repr_html_(), height=600)
 
         # Display the DataFrame and totals
-        st.dataframe(field_df)
+        st.write(field_df)
         
-        st.write(f"Total Area (Gunthas): {total_area}")
+        st.write(f"\nTotal Area (Gunthas): {total_area}")
         st.write(f"Total Time (Minutes): {total_time}")
         st.write(f"Total Travel Distance (km): {total_travel_distance}")
         st.write(f"Total Travel Time (minutes): {total_travel_time}")
         
-        # Add button to download the map as HTML
-        st.download_button(
-            label="Download Map as HTML",
-            data=map_obj.get_root().render(),
-            file_name="map.html",
-            mime="text/html"
-        )
+        # Add a download button for the map
+        map_filename = f"{vehicle}_map_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.html"
+        map_obj.save(map_filename)
+        with open(map_filename, "rb") as file:
+            btn = st.download_button(
+                label="Download Map as HTML",
+                data=file,
+                file_name=map_filename,
+                mime="text/html"
+            )
+        
+        # Clean up the file after download
+        if btn:
+            os.remove(map_filename)
